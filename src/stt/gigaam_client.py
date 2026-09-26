@@ -17,11 +17,8 @@ class GigaAMTranscriber:
             raise FileNotFoundError(f"Файл не найден: {file_path}")
             
         print(f"⏳ GigaAM анализирует файл: {file_path}...")
-        
-        # 🟢 ИСПРАВЛЕНИЕ: Вызываем transcribe и забираем атрибут .text из объекта результата
         result = self.model.transcribe(file_path)
         
-        # На случай, если библиотека вернула обычную строку или объект, проверяем наличие атрибута
         if hasattr(result, "text"):
             return result.text.strip()
         return str(result).strip()
@@ -57,18 +54,25 @@ class GigaAMTranscriber:
                         encoded, encoded_len = self.model.forward(audio_tensor, lengths)
                         output = self.model.decoding.decode(self.model.head, encoded, encoded_len)
                     
-                    # Безопасное извлечение текста
+                    # 🟢 ИСПРАВЛЕНИЕ: Вытаскиваем только чистую строку текста
                     text = ""
-                    # Если возвращается TranscriptionResult
+                    
+                    # 1. Если это TranscriptionResult объект (характерно для файлов)
                     if hasattr(output, "text"):
                         text = output.text
-                    # Если возвращается list/tuple
+                    
+                    # 2. Если это список или кортеж (как в вашем живом потоке)
                     elif isinstance(output, (list, tuple)) and len(output) > 0:
-                        text = str(output[0])
+                        # Если первый элемент — это тоже список/кортеж (двойная вложенность батча)
+                        first_item = output[0]
+                        if isinstance(first_item, (list, tuple)) and len(first_item) > 0:
+                            text = str(first_item[0])
+                        else:
+                            text = str(first_item)
                     else:
                         text = str(output)
                     
-                    # Выводим результат в эфир
+                    # Финальный вывод только осмысленного текста
                     clean_text = text.strip()
                     if clean_text:
                         print(f" ⏳ [В эфире]: {clean_text}")

@@ -9,6 +9,8 @@ env/
 models/*
 !models/.gitkeep
 
+data/*
+!data/.gitkeep
 # Кэш Python
 **/__pycache__/
 *.pyc

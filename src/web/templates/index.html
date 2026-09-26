@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Формирование отчётов</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: #f4f6f8;
+    margin: 0; padding: 0;
+    color: #222;
+  }
+  .container { max-width: 720px; margin: 40px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin-bottom: 20px; }
+
+  .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+  .tab-btn {
+    flex: 1; padding: 12px; border: none; background: #e2e6ea;
+    border-radius: 10px 10px 0 0; cursor: pointer; font-size: 15px;
+    color: #555; transition: 0.2s;
+  }
+  .tab-btn.active { background: #fff; color: #111; font-weight: 600; box-shadow: 0 -2px 6px rgba(0,0,0,0.05); }
+
+  .tab-content { display: none; background: #fff; padding: 24px; border-radius: 0 0 12px 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .tab-content.active { display: block; }
+
+  label { display: block; margin: 10px 0 4px; font-size: 13px; color: #555; }
+  input[type=file], input[type=text], textarea, select {
+    width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px;
+  }
+  textarea { resize: vertical; min-height: 70px; }
+
+  button.primary {
+    margin-top: 14px; padding: 10px 20px; background: #2563eb; color: #fff;
+    border: none; border-radius: 8px; cursor: pointer; font-size: 14px; transition: 0.2s;
+  }
+  button.primary:hover { background: #1d4ed8; }
+  button.primary:disabled { background: #aaa; cursor: not-allowed; }
+
+  .rec-btn {
+    padding: 10px 16px; border-radius: 8px; border: none; cursor: pointer;
+    background: #ef4444; color: #fff; font-size: 14px; margin-right: 8px;
+  }
+  .rec-btn.recording { background: #b91c1c; animation: pulse 1s infinite; }
+  @keyframes pulse { 0%{opacity:1;} 50%{opacity:0.6;} 100%{opacity:1;} }
+
+  .card {
+    border: 1px solid #eee; border-radius: 10px; padding: 14px; margin-bottom: 12px;
+    cursor: pointer; transition: 0.15s;
+  }
+  .card:hover { border-color: #2563eb; }
+  .card.selected { border-color: #2563eb; background: #eff6ff; }
+  .card b { display: block; margin-bottom: 4px; }
+  .card small { color: #888; }
+
+  #status { margin-top: 10px; font-size: 13px; color: #555; }
+  #processPanel { margin-top: 20px; padding-top: 16px; border-top: 1px solid #eee; display: none; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>📄 Формирование отчётов по аудио</h1>
+
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('templates')">⚙️ Настройка шаблонов</button>
+    <button class="tab-btn" onclick="switchTab('run')">🎙️ Заполнить отчёт</button>
+  </div>
+
+  <!-- TAB 1: шаблоны -->
+  <div id="tab-templates" class="tab-content active">
+    <form action="/upload_template" method="post" enctype="multipart/form-data">
+      <label>Файл шаблона (.docx, с плейсхолдерами вида {{поле}})</label>
+      <input type="file" name="docx" accept=".docx" required>
+
+      <label>Описание шаблона (для контекста нейросети)</label>
+      <textarea name="description" placeholder="Например: отчёт о звонке клиенту, поля: дата, клиент, суть обращения" required></textarea>
+
+      <button class="primary" type="submit">Загрузить шаблон</button>
+    </form>
+  </div>
+
+  <!-- TAB 2: работа -->
+  <div id="tab-run" class="tab-content">
+    <label>Выберите шаблон</label>
+    <div id="templateList">
+      {% for t in templates %}
+      <div class="card" data-id="{{ t.id }}" onclick="selectTemplate(this, '{{ t.id }}')">
+        <b>{{ t.description[:60] }}</b>
+        <small>{{ t.path.split('/')[-1] }}</small>
+      </div>
+      {% else %}
+      <p style="color:#888;">Нет загруженных шаблонов — добавьте на вкладке "Настройка шаблонов"</p>
+      {% endfor %}
+    </div>
+
+    <div id="processPanel">
+      <label>Голосовая запись</label>
+      <button type="button" class="rec-btn" id="recBtn" onclick="toggleRecording()">🎤 Начать запись</button>
+      <span id="recTimer"></span>
+
+      <label>...или загрузите готовый аудиофайл</label>
+      <input type="file" id="audioFile" accept="audio/*">
+
+      <label>...или вставьте текст вручную</label>
+      <textarea id="manualText" placeholder="Текст обращения"></textarea>
+
+      <button class="primary" onclick="submitProcess()">✨ Сформировать отчёт</button>
+      <div id="status"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+function switchTab(name) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+let selectedTemplateId = null;
+function selectTemplate(el, id) {
+  document.querySelectorAll('.card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  selectedTemplateId = id;
+  document.getElementById('processPanel').style.display = 'block';
+}
+
+// --- запись с микрофона ---
+let mediaRecorder, audioChunks = [], recordedBlob = null, recording = false, timerInterval, seconds = 0;
+
+async function toggleRecording() {
+  const btn = document.getElementById('recBtn');
+  if (!recording) {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      recordedBlob = new Blob(audioChunks, { type: 'audio/webm' });
+    };
+    mediaRecorder.start();
+    recording = true;
+    btn.textContent = '⏹ Остановить запись';
+    btn.classList.add('recording');
+    seconds = 0;
+    timerInterval = setInterval(() => {
+      seconds++;
+      document.getElementById('recTimer').textContent = ` ${seconds}s`;
+    }, 1000);
+  } else {
+    mediaRecorder.stop();
+    mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    recording = false;
+    btn.textContent = '🎤 Начать запись';
+    btn.classList.remove('recording');
+    clearInterval(timerInterval);
+  }
+}
+
+async function submitProcess() {
+  if (!selectedTemplateId) { alert('Выберите шаблон'); return; }
+  const status = document.getElementById('status');
+  status.textContent = '⏳ Обработка...';
+
+  const formData = new FormData();
+  const fileInput = document.getElementById('audioFile');
+  const manualText = document.getElementById('manualText').value.trim();
+
+  if (recordedBlob) {
+    formData.append('audio', recordedBlob, 'recording.webm');
+  } else if (fileInput.files.length > 0) {
+    formData.append('audio', fileInput.files[0]);
+  } else if (manualText) {
+    formData.append('text', manualText);
+  } else {
+    alert('Запишите голос, загрузите файл или введите текст');
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/process/${selectedTemplateId}`, { method: 'POST', body: formData });
+    if (!resp.ok) {
+      status.textContent = '❌ Ошибка: ' + (await resp.text());
+      return;
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'report.docx';
+    a.click();
+    status.textContent = '✅ Отчёт сформирован и скачан';
+  } catch (e) {
+    status.textContent = '❌ Ошибка сети: ' + e;
+  }
+}
+</script>
+</body>
+</html>

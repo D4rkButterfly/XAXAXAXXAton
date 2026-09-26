@@ -31,7 +31,24 @@ class LLMStructurer:
             base_url=LLM_BASE_URL,
             http_client=httpx.Client(verify=False)
         )
-        
+    def fill_template_fields(self, raw_text: str, template_description: str, field_names: list) -> dict:
+        system_prompt = (
+            f"Ты заполняешь отчёт по шаблону.\n"
+            f"Описание шаблона: {template_description}\n"
+            f"Нужные поля: {', '.join(field_names)}\n"
+            "На основе текста ниже верни ТОЛЬКО JSON вида {\"поле\": \"значение\"} "
+            "для каждого поля. Если данных нет — пустая строка. Без markdown."
+        )
+        response = self.client.chat.completions.create(
+            model=LLM_MODEL_NAME,
+            messages=[{"role": "system", "content": system_prompt},
+                    {"role": "user", "content": raw_text}],
+            temperature=0.1
+        )
+        print(f"🔍 Сырой ответ GigaChat: {response.choices[0].message.content.strip()}")
+        import json
+        return json.loads(response.choices[0].message.content.strip())
+    
     def structure_request(self, raw_text: str) -> str:
         """Превращает неструктурированный текст в валидный JSON с намерениями и сущностями"""
         system_prompt = (

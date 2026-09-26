@@ -43,7 +43,7 @@ class LLMStructurer:
             model=LLM_MODEL_NAME,
             messages=[{"role": "system", "content": system_prompt},
                     {"role": "user", "content": raw_text}],
-            temperature=0.1
+            temperature=0.3
         )
         print(f"🔍 Сырой ответ GigaChat: {response.choices[0].message.content.strip()}")
         import json
@@ -69,7 +69,7 @@ class LLMStructurer:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": raw_text}
                 ],
-                temperature=0.1,  # Минимальная температура для максимальной строгости формата
+                temperature=0.3,  # Минимальная температура для максимальной строгости формата
                 max_tokens=500
             )
             return response.choices[0].message.content.strip()

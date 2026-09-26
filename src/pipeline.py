@@ -1,34 +1,34 @@
-from src.audio.file_streamer import AudioFileStreamer
+import time
 from src.audio.mic_streamer import AudioMicStreamer
-from src.stt.vosk_client import VoskTranscriber
+from src.stt.gigaam_client import GigaAMTranscriber # Подключаем GigaAM
 from src.llm.llm_client import LLMStructurer
 
 class VoicePipeline:
     def __init__(self):
         self.mic_streamer = AudioMicStreamer()
-        self.transcriber = VoskTranscriber()
+        self.transcriber = GigaAMTranscriber()
         self.llm = LLMStructurer()
         
     def process_file(self, file_path: str):
-        """Режим 1: Транскрибация файла (Голосовые сообщения / Записи)"""
-        print(f"\nСтарт обработки файла: {file_path}")
+        """Режим для файлов (голосовые из мессенджеров любого формата)"""
+        start_time = time.time()
         try:
-            generator = AudioFileStreamer.stream_file(file_path)
-            text = self.transcriber.transcribe(generator, is_live=False)
-            
+            text = self.transcriber.transcribe_file(file_path)
             if text:
-                # Передача текста в слой LLM
+                print(f"\n📝 Итоговый текст (GigaAM): {text}")
                 llm_result = self.llm.structure_request(text)
-                print(f"Результат: {llm_result}")
+                print(f"🤖 LLM результат: {llm_result}")
+            else:
+                print("❌ Речь не обнаружена.")
         except Exception as e:
-            print(f"Ошибка обработки файла: {e}")
+            print(f"❌ Ошибка обработки файла: {e}")
 
     def process_live(self):
-        """Режим 2: Живой поток (Микрофон / IP-телефония)"""
-        print("\nСтарт живого потока. Для остановки нажмите Ctrl+C")
+        """Режим для живого потока (IP-телефония / Микрофон)"""
         try:
-            generator = self.mic_streamer.stream_mic()
-            # Будет работать бесконечно, выводя текст в консоль на ходу
-            self.transcriber.transcribe(generator, is_live=True)
+            audio_generator = self.mic_streamer.stream_mic(chunk_size=4000)
+            self.transcriber.transcribe_live_stream(audio_generator)
         except KeyboardInterrupt:
-            print("\nЖивой поток остановлен пользователем.")
+            print("\n🛑 Потоковое распознавание остановлено.")
+        except Exception as e:
+            print(f"❌ Ошибка в живом потоке: {e}")

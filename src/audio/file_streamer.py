@@ -1,4 +1,4 @@
-# Потоковое чтение ЛЮБЫХ файлов через FFmpeg (мессенджеры)
+# Потоковое чтение файлов через FFmpeg (далее мессенджеры)
 import os
 import subprocess
 from typing import Generator

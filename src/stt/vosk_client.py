@@ -7,7 +7,7 @@ class VoskTranscriber:
     def __init__(self):
         if not os.path.exists(VOSK_MODEL_PATH):
             raise FileNotFoundError(f"Модель Vosk не найдена по пути: {VOSK_MODEL_PATH}")
-        print(f"📦 Загрузка модели Vosk...")
+        print(f"Загрузка модели Vosk...")
         self.model = Model(VOSK_MODEL_PATH)
         
     def transcribe(self, audio_generator, is_live: bool = False) -> str:

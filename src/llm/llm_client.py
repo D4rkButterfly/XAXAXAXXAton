@@ -1,6 +1,23 @@
 import json
+import httpx
 from openai import OpenAI
 from config.settings import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL_NAME
+import uuid
+import httpx
+
+def get_access_token(auth_key: str) -> str:
+    resp = httpx.post(
+        "https://ngw.devices.sberbank.ru:9443/api/v2/oauth",
+        headers={
+            "Authorization": f"Basic {auth_key}",
+            "RqUID": str(uuid.uuid4()),
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        data={"scope": "GIGACHAT_API_PERS"},  # или CORP/B2B — смотри тариф
+        verify=False
+    )
+    resp.raise_for_status()
+    return resp.json()["access_token"]
 
 class LLMStructurer:
     def __init__(self):
@@ -8,9 +25,11 @@ class LLMStructurer:
         # ВАЖНО для Windows/GigaChat: Сбер использует свои SSL-сертификаты Минцифры.
         # Если API выдает ошибку сертификата, в продакшене нужно установить сертификаты,
         # либо временно отключить проверку в среде (для тестов).
+        access_token = get_access_token(LLM_API_KEY)
         self.client = OpenAI(
-            api_key=LLM_API_KEY, 
-            base_url=LLM_BASE_URL
+            api_key= access_token, 
+            base_url=LLM_BASE_URL,
+            http_client=httpx.Client(verify=False)
         )
         
     def structure_request(self, raw_text: str) -> str:

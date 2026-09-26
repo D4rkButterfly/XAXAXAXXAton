@@ -1,0 +1,29 @@
+# Среда и виртуальное окружение Python
+.venv/
+venv/
+ENV/
+env/
+.env
+
+# Локальные тяжелые модели Vosk (скачиваются отдельно)
+models/*
+!models/.gitkeep
+
+# Кэш Python
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Локальные файлы тестов и аудиозаписи
+*.mp3
+*.m4a
+*.ogg
+*.wav
+*.txt
+*.json
+
+# Настройки среды разработки (VS Code / PyCharm)
+.vscode/
+.idea/
+.DS_Store

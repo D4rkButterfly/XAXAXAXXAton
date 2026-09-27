@@ -49,29 +49,42 @@ class LLMStructurer:
         import json
         return json.loads(response.choices[0].message.content.strip())
     
-    def structure_request(self, raw_text: str) -> str:
-        """Превращает неструктурированный текст в валидный JSON с намерениями и сущностями"""
+    def fill_template_fields(self, raw_text: str, template_description: str, field_names: list) -> dict:
+        from datetime import date
+        today = date.today().strftime("%d.%m.%Y")
+
         system_prompt = (
-            "Ты — интеллектуальный модуль обработки команд умного дома и телефонии.\n"
-            "Твоя задача — взять сырой текст распознанной речи и превратить его в структурированный JSON-запрос.\n"
-            "Выдели следующие поля:\n"
-            "1. intent (намерение пользователя английскими буквами в snake_case, например: 'create_task', 'call_abonent', 'check_weather', 'unknown')\n"
-            "2. entities (слова-сущности в виде ключ-значение: даты, имена, объекты, локации, номера телефонов)\n"
-            "3. clean_text (очищенный от мусора исходный текст)\n\n"
-            "Отвечай СТРОГО в формате JSON. Любой текст вне JSON-структуры запрещен. "
-            "Не используй markdown разметку, не пиши ```json."
+            f"Ты заполняешь отчёт по шаблону.\n"
+            f"Описание шаблона: {template_description}\n"
+            f"Нужные поля: {', '.join(field_names)}\n"
+            f"Сегодняшняя дата: {today}\n\n"
+            "Правила:\n"
+            "1. Если поле подразумевает дату, а в тексте прямая дата не названа — "
+            f"подставь сегодняшнюю дату ({today}), если это уместно по смыслу.\n"
+            "2. Если поле подразумевает сумму, количество или итог (например 'итого', "
+            "'сумма', 'общее количество') — самостоятельно посчитай на основе чисел "
+            "из текста (сложи, умножь на цену, если она указана, посчитай количество "
+            "перечисленных позиций и т.д.). Указывай только результат, без вычислений в тексте.\n"
+            "3. Если данных для поля действительно нет и вычислить нельзя — пустая строка.\n"
+            "4. Числа пиши цифрами, не прописью.\n\n"
+            "Верни ТОЛЬКО JSON вида {\"поле\": \"значение\"} для каждого поля. "
+            "Без markdown, без пояснений вне JSON."
         )
-        
+        response = self.client.chat.completions.create(
+            model=LLM_MODEL_NAME,
+            messages=[{"role": "system", "content": system_prompt},
+                    {"role": "user", "content": raw_text}],
+            temperature=0.3
+        )
+        raw = response.choices[0].message.content.strip()
+        print(f"🔍 Сырой ответ GigaChat: {raw}")
+
+        if raw.startswith("```"):
+            raw = raw.strip("`").replace("json", "", 1).strip()
+
+        import json
         try:
-            response = self.client.chat.completions.create(
-                model=LLM_MODEL_NAME,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": raw_text}
-                ],
-                temperature=0.3,  # Минимальная температура для максимальной строгости формата
-                max_tokens=500
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e:
-            return f'{{"error": "Ошибка GigaChat API: {str(e)}"}}'
+            return json.loads(raw)
+        except json.JSONDecodeError as e:
+            print(f"❌ Не удалось распарсить JSON: {e}\nОтвет был: {raw}")
+            return {name: "" for name in field_names}

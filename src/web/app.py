@@ -47,8 +47,10 @@ def process(template_id):
         audio_path = os.path.join(DATA_DIR, "tmp_audio.wav")
         audio.save(audio_path)
         text = transcriber.transcribe_file(audio_path)
+        print(f"📝 Распознанный текст: {text}") 
     else:
         text = request.form.get("text", "").strip()
+        print(f"📝 Распознанный текст: {text}") 
 
     if not text:
         return "Нет данных: ни аудио, ни текст", 400
